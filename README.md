@@ -43,7 +43,7 @@ Stable releases require `JAM_KEYSTORE_B64`, `JAM_KEYSTORE_PASSWORD` and `JAM_KEY
 npm ci --ignore-scripts
 npm run names
 npm test
-./gradlew :plugin:assembleRelease :plugin:lintRelease :plugin:testReleaseUnitTest
+./gradlew :plugin:assembleRelease :plugin:lintRelease :plugin:testDebugUnitTest
 ```
 
 No app build is necessary to generate dictionaries or run invite-route tests. The host and plugin must both include the new API 1 extension capabilities.

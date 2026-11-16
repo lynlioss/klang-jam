@@ -45,7 +45,7 @@ internal class Realtime(private val context: Context, private val scope: Corouti
             val response = if (refresh.isNotBlank()) runCatching {
                 post("/auth/v1/token?grant_type=refresh_token", JSONObject().put("refresh_token", refresh), false)
             }.getOrNull() else null
-            val auth = response ?: post("/auth/v1/signup", JSONObject().put("data", JSONObject()), false)
+            val auth = response ?: post("/auth/v1/signup", JSONObject().put("data", JSONObject().put("app", "klang-jam")), false)
             jwt = auth.getString("access_token"); refresh = auth.getString("refresh_token")
             userId = auth.getJSONObject("user").getString("id")
             expires = System.currentTimeMillis() + auth.optLong("expires_in", 3600) * 1000

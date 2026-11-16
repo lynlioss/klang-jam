@@ -10,6 +10,7 @@ import org.webrtc.*
 import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
+import java.util.concurrent.atomic.AtomicLong
 
 internal class Peers(context: Context, private val scope: CoroutineScope, settings: JSONObject,
     private val signal: suspend (String, String, JSONObject) -> Unit,
@@ -56,6 +57,8 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
         private var remoteDescription = false
         private var transfer: Job? = null
         private var closed = false
+        private val acknowledged = AtomicLong(0)
+        private var completedHash = ""
         fun init(offer: Boolean) {
             val config = PeerConnection.RTCConfiguration(servers).apply {
                 sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
@@ -124,6 +127,11 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                 override fun onMessage(buffer: DataChannel.Buffer) {
                     if (buffer.data.remaining() > 16 * 1024) { scope.launch { close() }; return }
                     val bytes = ByteArray(buffer.data.remaining()); buffer.data.get(bytes)
+                    if (!buffer.binary) {
+                        val json = runCatching { JSONObject(bytes.toString(Charsets.UTF_8)) }.getOrNull()
+                        if (json?.has("ack") == true) { acknowledged.set(json.optLong("ack")); return }
+                        if (json?.has("complete") == true) { scope.launch { completedHash = json.optString("complete") }; return }
+                    }
                     if (incoming?.trySend(buffer.binary to bytes)?.isSuccess != true) scope.launch { changed(id, "Transfer interrupted"); close() }
                 }
             })
@@ -154,12 +162,14 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                                             }
                                             total += chunk.second.size; require(total <= size)
                                             digest.update(chunk.second); output.write(chunk.second)
+                                            dataChannel.send(DataChannel.Buffer(ByteBuffer.wrap(JSONObject().put("ack", total).toString().toByteArray()), false))
                                         }
                                         require(total == size && digest.digest().joinToString("") { "%02x".format(it) } == hash)
                                     }
                                 }
                             }
                             received(id, meta, file)
+                            dataChannel.send(DataChannel.Buffer(ByteBuffer.wrap(JSONObject().put("complete", hash).toString().toByteArray()), false))
                         } finally { file.delete() }
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
@@ -170,18 +180,22 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
             val dataChannel = requireNotNull(channel)
             require(dataChannel.state() == DataChannel.State.OPEN)
             changed(id, "Syncing audio")
+            acknowledged.set(0); completedHash = ""
             withTimeout(120_000) {
                 frame(dataChannel, metadata.toString().toByteArray(), false)
                 withContext(Dispatchers.IO) {
                     file.inputStream().use { input ->
                         val bytes = ByteArray(16 * 1024)
+                        var sent = 0L
                         while (true) {
                             ensureActive(); val count = input.read(bytes); if (count < 0) break
-                            frame(dataChannel, bytes.copyOf(count), true)
+                            while (sent - acknowledged.get() >= 128 * 1024) { delay(5); require(dataChannel.state() == DataChannel.State.OPEN) }
+                            frame(dataChannel, bytes.copyOf(count), true); sent += count
                         }
                     }
                 }
                 frame(dataChannel, JSONObject().put("end", metadata.getString("sha256")).toString().toByteArray(), false)
+                while (completedHash != metadata.getString("sha256")) { delay(10); require(dataChannel.state() == DataChannel.State.OPEN) }
             }
         }
         private suspend fun frame(dataChannel: DataChannel, bytes: ByteArray, binary: Boolean) {

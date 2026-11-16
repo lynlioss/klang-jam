@@ -1,0 +1,14 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "io.github.lynlioss.klang",
+      "sha256_cert_fingerprints": [
+        "B4:9A:8A:3D:52:CE:6F:7F:26:68:E1:58:75:A0:69:DD:DA:4B:AF:DD:5B:79:48:38:E0:8D:DE:CE:BC:54:99:43"
+      ]
+    }
+  }
+]

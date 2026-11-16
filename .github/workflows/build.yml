@@ -41,7 +41,7 @@ jobs:
           JAM_KEYSTORE_PASSWORD: ${{ secrets.JAM_KEYSTORE_PASSWORD }}
           JAM_KEY_ALIAS: ${{ secrets.JAM_KEY_ALIAS }}
         run: |
-          ./gradlew :plugin:assembleRelease :plugin:lintRelease :plugin:testReleaseUnitTest --no-daemon
+          ./gradlew :plugin:assembleRelease :plugin:lintRelease :plugin:testDebugUnitTest --no-daemon
           cp plugin/build/outputs/apk/release/plugin-release.apk plugin.apk
           sha256sum plugin.apk > plugin.apk.sha256
           sha256sum plugin.json > plugin.json.sha256
