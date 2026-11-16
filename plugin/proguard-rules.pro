@@ -6,3 +6,6 @@
 # intact so the separately optimized test APK can call the same runtime.
 -keep class kotlin.** { *; }
 -keep class kotlinx.coroutines.** { *; }
+# Peers is also constructed by the separate instrumentation APK. Keep its
+# constructor/callback contract, rather than specializing it to JamService.
+-keep class app.lynli.klang.jam.Peers { *; }

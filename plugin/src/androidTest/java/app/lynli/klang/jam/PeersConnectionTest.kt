@@ -1,6 +1,7 @@
 package app.lynli.klang.jam
 
 import android.content.ContextWrapper
+import android.util.Log
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import kotlinx.coroutines.*
@@ -16,7 +17,9 @@ class PeersConnectionTest {
     @Test fun twoPeersNegotiateAndTransferChunksWithoutTurnThenLeaveAndReconnect() = runBlocking {
         val context = InstrumentationRegistry.getInstrumentation().targetContext
         val root = File(context.cacheDir, "connection-test").apply { deleteRecursively(); mkdirs() }
-        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main + CoroutineExceptionHandler { _, failure ->
+            Log.e("JamPeerTest", "Peer callback failed", failure)
+        })
         val failures = mutableListOf<String>()
         val bytes = ByteArray(512 * 1024 + 17) { (it * 31).toByte() }
         val hash = MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
@@ -34,15 +37,15 @@ class PeersConnectionTest {
                 lateinit var guest: Peers
                 withContext(Dispatchers.Main) {
                     host = Peers(device("host"), scope, JSONObject().put("stunUrl", ""),
-                        { _, event, payload -> guest.signal("host", event, payload) }, { _, _ -> false },
+                        { _, event, payload -> Log.i("JamPeerTest", "host sends $event"); guest.signal("host", event, payload) }, { _, _ -> false },
                         { _, _, _ -> fail("Guest must not send audio") },
-                        { _, status -> if (status.contains("failed", true)) failures.add(status) },
+                        { _, status -> Log.i("JamPeerTest", "host: $status"); if (status.contains("failed", true)) failures.add(status) },
                         { hostOpened.complete(Unit) })
                     guest = Peers(device("guest"), scope, JSONObject().put("stunUrl", ""),
-                        { _, event, payload -> host.signal("guest", event, payload) },
+                        { _, event, payload -> Log.i("JamPeerTest", "guest sends $event"); host.signal("guest", event, payload) },
                         { sender, meta -> sender == "host" && meta.optString("sha256") == hash && meta.optLong("bytes") == bytes.size.toLong() },
                         { _, _, incoming -> received.complete(incoming.readBytes()) },
-                        { _, status -> if (status.contains("failed", true)) failures.add(status) },
+                        { _, status -> Log.i("JamPeerTest", "guest: $status"); if (status.contains("failed", true)) failures.add(status) },
                         { guestOpened.complete(Unit) })
                 }
                 try {
