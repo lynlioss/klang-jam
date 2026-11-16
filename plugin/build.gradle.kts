@@ -44,4 +44,5 @@ dependencies {
     testImplementation("org.json:json:20250517")
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
+    androidTestImplementation("com.google.errorprone:error_prone_annotations:2.36.0")
 }
