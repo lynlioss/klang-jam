@@ -31,6 +31,7 @@ android {
         isDebuggable = System.getenv("JAM_RELEASE_TEST") == "true"
         signingConfig = signingConfigs.getByName(if (System.getenv("JAM_KEYSTORE_FILE") != null) "release" else "debug")
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        testProguardFiles("test-proguard-rules.pro")
     } }
     testBuildType = "release"
     buildFeatures { buildConfig = true }
