@@ -74,9 +74,10 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
         private val pendingIce = mutableListOf<IceCandidate>()
         private var remoteDescription = false
         private var transfer: Job? = null
-        private var closed = false
+        @Volatile private var closed = false
         private val acknowledged = AtomicLong(0)
-        private var completedHash = ""
+        @Volatile private var completedHash = ""
+        private fun callback(block: () -> Unit) = scope.launch { if (!closed) block() }
         fun init(offer: Boolean) {
             val config = PeerConnection.RTCConfiguration(servers).apply {
                 sdpSemantics = PeerConnection.SdpSemantics.UNIFIED_PLAN
@@ -85,7 +86,7 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
             connection = requireNotNull(factory.createPeerConnection(config, object : PeerConnection.Observer {
                 override fun onSignalingChange(state: PeerConnection.SignalingState) {}
                 override fun onIceConnectionChange(state: PeerConnection.IceConnectionState) {
-                    scope.launch {
+                    callback {
                         if (state == PeerConnection.IceConnectionState.FAILED) changed(id, "Direct connection failed. Try an optional TURN relay.")
                         if (state == PeerConnection.IceConnectionState.DISCONNECTED) changed(id, "Reconnecting")
                     }
@@ -93,12 +94,15 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                 override fun onIceConnectionReceivingChange(receiving: Boolean) {}
                 override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {}
                 override fun onIceCandidate(candidate: IceCandidate) { scope.launch {
+                    if (closed) return@launch
                     runCatching { signal(id, "ice", JSONObject().put("candidate", candidate.sdp).put("mid", candidate.sdpMid).put("line", candidate.sdpMLineIndex)) }
                 } }
                 override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {}
                 override fun onAddStream(stream: MediaStream) {}
                 override fun onRemoveStream(stream: MediaStream) {}
-                override fun onDataChannel(dataChannel: DataChannel) { scope.launch { attach(dataChannel) } }
+                override fun onDataChannel(dataChannel: DataChannel) { scope.launch {
+                    if (closed) { dataChannel.close(); dataChannel.dispose() } else attach(dataChannel)
+                } }
                 override fun onRenegotiationNeeded() {}
                 override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {}
             }))
@@ -120,11 +124,11 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                 "offer", "answer" -> {
                     val text = payload.getString("sdp").also { require(it.length <= 50000) }
                     connection.setRemoteDescription(object : SdpObserver {
-                        override fun onSetSuccess() { scope.launch {
+                        override fun onSetSuccess() { callback {
                             remoteDescription = true; pendingIce.forEach { connection.addIceCandidate(it) }; pendingIce.clear()
                             if (event == "offer") connection.createAnswer(observer { sdp -> local(sdp, "answer") }, MediaConstraints())
                         } }
-                        override fun onSetFailure(error: String) { scope.launch { changed(id, "Connection negotiation failed") } }
+                        override fun onSetFailure(error: String) { callback { changed(id, "Connection negotiation failed") } }
                         override fun onCreateSuccess(sdp: SessionDescription) {}
                         override fun onCreateFailure(error: String) {}
                     }, SessionDescription(if (event == "offer") SessionDescription.Type.OFFER else SessionDescription.Type.ANSWER, text))
@@ -141,11 +145,12 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
             incoming = Channel(32)
             dataChannel.registerObserver(object : DataChannel.Observer {
                 override fun onBufferedAmountChange(previous: Long) {}
-                override fun onStateChange() { scope.launch {
+                override fun onStateChange() { callback {
                     if (dataChannel.state() == DataChannel.State.OPEN) { changed(id, "Connected"); opened(id) }
                     else if (dataChannel.state() == DataChannel.State.CLOSED) { incoming?.close(); changed(id, "Disconnected") }
                 } }
                 override fun onMessage(buffer: DataChannel.Buffer) {
+                    if (closed) return
                     if (buffer.data.remaining() > 16 * 1024) { scope.launch { close() }; return }
                     val bytes = ByteArray(buffer.data.remaining()); buffer.data.get(bytes)
                     if (!buffer.binary) {
@@ -183,14 +188,14 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                                             }
                                             total += chunk.second.size; require(total <= size)
                                             digest.update(chunk.second); output.write(chunk.second)
-                                            dataChannel.send(DataChannel.Buffer(ByteBuffer.wrap(JSONObject().put("ack", total).toString().toByteArray()), false))
+                                            frame(dataChannel, JSONObject().put("ack", total).toString().toByteArray(), false)
                                         }
                                         require(total == size && digest.digest().joinToString("") { "%02x".format(it) } == hash)
                                     }
                                 }
                             }
                             received(id, meta, file)
-                            dataChannel.send(DataChannel.Buffer(ByteBuffer.wrap(JSONObject().put("complete", hash).toString().toByteArray()), false))
+                            frame(dataChannel, JSONObject().put("complete", hash).toString().toByteArray(), false)
                         } finally { file.delete() }
                     }
                 } catch (cancelled: CancellationException) { throw cancelled }
@@ -210,25 +215,33 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                         var sent = 0L
                         while (true) {
                             ensureActive(); val count = input.read(bytes); if (count < 0) break
-                            while (sent - acknowledged.get() >= 128 * 1024) { delay(5); require(dataChannel.state() == DataChannel.State.OPEN) }
+                            while (sent - acknowledged.get() >= 128 * 1024) { delay(5); requireOpen(dataChannel) }
                             frame(dataChannel, bytes.copyOf(count), true); sent += count
                         }
                     }
                 }
                 frame(dataChannel, JSONObject().put("end", metadata.getString("sha256")).toString().toByteArray(), false)
-                while (completedHash != metadata.getString("sha256")) { delay(10); require(dataChannel.state() == DataChannel.State.OPEN) }
+                while (completedHash != metadata.getString("sha256")) { delay(10); requireOpen(dataChannel) }
             }
         }
-        private suspend fun frame(dataChannel: DataChannel, bytes: ByteArray, binary: Boolean) {
-            while (dataChannel.bufferedAmount() > 128 * 1024) { delay(10); require(dataChannel.state() == DataChannel.State.OPEN) }
-            while (!dataChannel.send(DataChannel.Buffer(ByteBuffer.wrap(bytes), binary))) { delay(10); require(dataChannel.state() == DataChannel.State.OPEN) }
+        private suspend fun requireOpen(dataChannel: DataChannel) = withContext(Dispatchers.Main) {
+            require(!closed && dataChannel.state() == DataChannel.State.OPEN) { "Peer connection closed" }
+        }
+        private suspend fun frame(dataChannel: DataChannel, bytes: ByteArray, binary: Boolean) = withContext(Dispatchers.Main) {
+            while (true) {
+                requireOpen(dataChannel)
+                // Serialize native calls with disposal. send consumes the ByteBuffer even on failure.
+                if (dataChannel.bufferedAmount() <= 128 * 1024 &&
+                    dataChannel.send(DataChannel.Buffer(ByteBuffer.wrap(bytes), binary))) break
+                delay(10)
+            }
         }
         fun close() { if (closed) return; closed = true; transfer?.cancel(); incoming?.close(); channel?.unregisterObserver(); channel?.close(); channel?.dispose(); if (::connection.isInitialized) { connection.close(); connection.dispose() } }
-    }
-    private fun observer(created: (SessionDescription) -> Unit) = object : SdpObserver {
-        override fun onCreateSuccess(sdp: SessionDescription) { scope.launch { created(sdp) } }
-        override fun onSetSuccess() {}
-        override fun onCreateFailure(error: String) { scope.launch { changed("", "WebRTC negotiation failed") } }
-        override fun onSetFailure(error: String) { scope.launch { changed("", "WebRTC negotiation failed") } }
+        private fun observer(created: (SessionDescription) -> Unit) = object : SdpObserver {
+            override fun onCreateSuccess(sdp: SessionDescription) { callback { created(sdp) } }
+            override fun onSetSuccess() {}
+            override fun onCreateFailure(error: String) { callback { changed(id, "WebRTC negotiation failed") } }
+            override fun onSetFailure(error: String) { callback { changed(id, "WebRTC negotiation failed") } }
+        }
     }
 }
