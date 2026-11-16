@@ -94,14 +94,21 @@ jobs:
           packages: 'platforms;android-37.2 build-tools;37.0.0'
       - name: Test native startup on a CI emulator
         uses: reactivecircus/android-emulator-runner@v2
+        env:
+          JAM_RELEASE_TEST: 'true'
         with:
           api-level: 36
           arch: x86_64
           profile: pixel_6
           disable-animations: true
-          script: ./gradlew :plugin:connectedDebugAndroidTest --no-daemon
+          script: ./gradlew :plugin:connectedReleaseAndroidTest --no-daemon
+      - name: Capture native crash logs
+        if: failure()
+        run: adb logcat -d > plugin-native-crash.log || true
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: android-startup-reports
-          path: plugin/build/reports/androidTests/
+          path: |
+            plugin/build/reports/androidTests/
+            plugin-native-crash.log

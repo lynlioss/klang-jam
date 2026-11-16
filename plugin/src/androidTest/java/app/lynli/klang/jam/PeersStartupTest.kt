@@ -25,6 +25,13 @@ class PeersStartupTest {
         }
     }
 
+    @Test fun nativeJniEntryPointsSurviveReleaseOptimization() {
+        // libjingle loads this class by its literal name during JNI initialization.
+        val loader = InstrumentationRegistry.getInstrumentation().targetContext.classLoader
+        val init = Class.forName("org.jni_zero.JniInit", false, loader)
+        assertNotNull(init.getDeclaredMethod("init"))
+    }
+
     @Test fun soloRoomCanCloseBeforeNativeStartup() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)

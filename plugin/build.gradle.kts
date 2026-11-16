@@ -27,9 +27,12 @@ android {
     }
     buildTypes { release {
         isMinifyEnabled = true
+        // Exercise R8 and native JNI loading in instrumentation, as in the installed release.
+        isDebuggable = System.getenv("JAM_RELEASE_TEST") == "true"
         signingConfig = signingConfigs.getByName(if (System.getenv("JAM_KEYSTORE_FILE") != null) "release" else "debug")
         proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
     } }
+    testBuildType = "release"
     buildFeatures { buildConfig = true }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
