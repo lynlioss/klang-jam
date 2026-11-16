@@ -52,6 +52,14 @@ No app build is necessary to generate dictionaries or run invite-route tests. Th
 
 `web/` contains the Cloudflare Pages invite page and worker. The worker validates four-character routes, escapes metadata, and preserves `/.well-known/assetlinks.json`. `klang://jam/<code>` works independently of Android domain verification. Deep links open the Join panel with the code; they do not join without a tap.
 
+Discord and X previews use the title “Join this Jam on Klang!” and a 1200 × 630
+PNG at `/share/v1/<code>.png`. The worker draws each invite code beside the Klang
+logo from pre-rendered pixels, so previews need no browser or external image API.
+To update the source artwork, install Pillow and run
+`python3 scripts/generate-share-assets.py`. Commit the generated `web/assets/`
+files with the sources in `scripts/share-assets/`. Change the image URL version
+when artwork changes, since image responses are cached as immutable.
+
 For direct HTTPS App Links, generate metadata from the **Klang app's actual signing certificate**, not the Jam certificate:
 
 ```sh
