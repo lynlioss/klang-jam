@@ -30,9 +30,9 @@ internal class Realtime(private val context: Context, private val scope: Corouti
     private var joinRef = ""
     private val authLock = kotlinx.coroutines.sync.Mutex()
     suspend fun authenticate(url: String, publishableKey: String) {
-        val parsed = url.toHttpUrlOrNull() ?: error("Set a valid Supabase project URL in plugin settings")
+        val parsed = url.toHttpUrlOrNull() ?: error("Jam couldn't connect. Update the plugin and try again.")
         require(parsed.isHttps && parsed.encodedPath == "/" && parsed.username.isBlank() && parsed.password.isBlank())
-        require(publishableKey.isNotBlank()) { "Set the Supabase publishable key in plugin settings" }
+        require(publishableKey.isNotBlank()) { "Jam couldn't connect. Update the plugin and try again." }
         base = url.trimEnd('/'); key = publishableKey
         val prefs = context.getSharedPreferences("jam-auth", 0)
         if (prefs.getString("project", "") == base) refresh = prefs.getString("refresh", "").orEmpty()

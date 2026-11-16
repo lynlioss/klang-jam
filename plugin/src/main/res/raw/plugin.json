@@ -28,20 +28,6 @@
   ],
   "settings": [
     {
-      "id": "supabaseUrl",
-      "type": "text",
-      "title": "Supabase project URL",
-      "default": "https://pbvojjvjboeykhrbjrgo.supabase.co"
-    },
-    {
-      "id": "supabaseKey",
-      "type": "text",
-      "title": "Supabase publishable key",
-      "description": "Leave blank to use the key supplied by the plugin release. Never use a service-role key.",
-      "default": "",
-      "secret": true
-    },
-    {
       "id": "stunUrl",
       "type": "text",
       "title": "STUN server",

@@ -18,7 +18,10 @@ inside the host process.
 
 Panel nodes use `type`, `label`, and node-specific fields: `supporting`, `action`,
 `id`, `value`, `input`, `maxLength`, `secret`, `enabled`, `checked`, `badge`,
-`style` and `shareUrl`. Panel size is limited to forty nodes. Native UI takes
+`style`, `shareUrl`, `eyebrow`, `placement` and `presentation`. Up to two buttons
+with `placement: "footer"` stay below the scrolling content. A button with
+`presentation: "icon"` uses its label for accessibility and a tooltip.
+Panel size is limited to forty nodes. Native UI takes
 color, shape and motion from Klang's current content theme.
 
 `badge:{visible,label,loading}` contributes the animated center control.

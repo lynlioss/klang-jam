@@ -155,8 +155,7 @@ class JamService : Service() {
                 render()
             }
             realtime = network
-            network.authenticate(settings.optString("supabaseUrl").ifBlank { BuildConfig.SUPABASE_URL },
-                settings.optString("supabaseKey").ifBlank { BuildConfig.SUPABASE_KEY })
+            network.authenticate(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_KEY)
             val savedRoom = getSharedPreferences("jam-session", 0).getString("room", "").orEmpty()
             if (savedRoom.isNotBlank()) runCatching { network.rpc("leave", JSONObject().put("room", savedRoom)) }
             name = Names.random()
@@ -499,8 +498,7 @@ class JamService : Service() {
             items.put(button("Join a Jam", "join", "join", "tonal"))
             if (busy) items.put(item("progress", "Getting your Jam ready"))
         } else {
-            items.put(item("hero", r.getString("code")).put("supporting", "${memberIds.size} OF 4 · INVITE YOUR PEOPLE"))
-            items.put(button("Share invite", "share", "share", "tonal").put("shareUrl", "https://jamklang.pages.dev/${r.getString("code")}"))
+            items.put(item("hero", r.getString("code")).put("eyebrow", "Invite code").put("supporting", "${memberIds.size} of 4 members"))
             if (syncing) items.put(item("progress", if (!networkReady) "Reconnecting to Jam" else "Syncing everyone's music"))
             val members = r.optJSONArray("members") ?: JSONArray()
             for (index in 0 until members.length()) {
@@ -513,8 +511,11 @@ class JamService : Service() {
             if (leader) items.put(item("toggle", "Group controls").put("action", "controls").put("checked", r.optBoolean("controls"))
                 .put("supporting", "Let everyone play, pause, skip and seek.").put("enabled", !busy))
             else items.put(item("text", if (r.optBoolean("controls")) "Everyone can control the music." else "The leader controls the music."))
-            if (memberIds.size == 1) items.put(item("text", "Your Jam ends after five minutes alone."))
-            items.put(button(if (leader) "Disband Jam" else "Leave Jam", "leave", "leave", if (leader) "danger" else "tonal"))
+            if (memberIds.size == 1) items.put(item("text", "Jam ends after five minutes with no other members."))
+            items.put(button(if (leader) "End Jam" else "Leave Jam", "leave", "leave")
+                .put("placement", "footer").put("presentation", "icon"))
+            items.put(button("Share invite", "share", "share").put("placement", "footer")
+                .put("shareUrl", "https://jamklang.pages.dev/${r.getString("code")}"))
         }
         error?.let { items.put(item("error", it.take(500))) }
         val state = JSONObject().put("panel", JSONObject().put("title", "Jam").put("items", items))

@@ -21,7 +21,7 @@ The publishable key cannot apply migrations or turn on anonymous authentication.
 
 Jam works **without TURN** when the devices can reach each other. It uses a configurable STUN server and encrypted, reliable, ordered WebRTC data channels. Every participant connects to the leader; only the leader shares audio. NATs and firewalls on some mobile networks prevent direct connections. The plugin reports that failure; a TURN relay is optional, rather than required.
 
-All server configuration is inside **Jam's plugin settings**: Supabase URL/key override, STUN URL, optional TURN URL, username and masked password. Leave TURN blank for direct connections. A TURN relay carries encrypted WebRTC traffic, rather than plaintext audio. Changing connection settings applies to the next Jam. Production relay credentials should be short-lived; a credential issuer can be added without changing Klang.
+The Supabase URL and publishable key are configured when the plugin is built and cannot be changed in the app. Jam's plugin settings contain the STUN URL, optional TURN URL, username and masked password. Leave TURN blank for direct connections. A TURN relay carries encrypted WebRTC traffic, rather than plaintext audio. Changing connection settings applies to the next Jam. Production relay credentials should be short-lived; a credential issuer can be added without changing Klang.
 
 ## Audio and synchronization
 
