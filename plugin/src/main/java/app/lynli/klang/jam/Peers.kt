@@ -102,6 +102,9 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                 override fun onRenegotiationNeeded() {}
                 override fun onAddTrack(receiver: RtpReceiver, streams: Array<out MediaStream>) {}
             }))
+            // Files use SCTP data channels. Klang owns playback; WebRTC never records or plays audio.
+            connection.setAudioRecording(false)
+            connection.setAudioPlayout(false)
             if (offer) {
                 attach(connection.createDataChannel("jam-audio-v1", DataChannel.Init().apply { ordered = true }))
                 connection.createOffer(observer { sdp -> local(sdp, "offer") }, MediaConstraints())
