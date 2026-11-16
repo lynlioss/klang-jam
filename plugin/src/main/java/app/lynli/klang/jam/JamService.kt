@@ -187,7 +187,9 @@ class JamService : Service() {
                     }
                 }
             }
-            clockJob = safe { while (isActive && room != null) { if (!leader) { clock.resetWindow(); repeat(5) { ping(); delay(200) } }; delay(10_000) } }
+            clockJob = scope.launch { jamAction(::reportFailure) {
+                while (isActive && room != null) { if (!leader) { clock.resetWindow(); repeat(5) { ping(); delay(200) } }; delay(10_000) }
+            } }
             // Audio preparation must not undo a successfully created room.
             if (leader) safe { prepareCurrent() }
         } catch (cancelled: CancellationException) {
