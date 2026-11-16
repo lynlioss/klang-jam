@@ -14,7 +14,7 @@ import java.security.MessageDigest
 import java.util.concurrent.atomic.AtomicLong
 
 internal class Peers(context: Context, private val scope: CoroutineScope, settings: JSONObject,
-    private val signal: suspend (String, String, JSONObject) -> Unit,
+    private val sendSignal: suspend (String, String, JSONObject) -> Unit,
     private val accept: (String, JSONObject) -> Boolean,
     private val received: suspend (String, JSONObject, File) -> Unit,
     private val changed: (String, String) -> Unit,
@@ -56,7 +56,7 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
         if (peer.channel?.state() == DataChannel.State.OPEN) return
         val description = peer.connection.localDescription ?: return
         if (description.type == SessionDescription.Type.OFFER) scope.launch {
-            runCatching { signal(id, "offer", JSONObject().put("sdp", description.description)) }
+            runCatching { sendSignal(id, "offer", JSONObject().put("sdp", description.description)) }
         }
     }
     fun isOpen(id: String) = peers[id]?.channel?.state() == DataChannel.State.OPEN
@@ -95,7 +95,7 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                 override fun onIceGatheringChange(state: PeerConnection.IceGatheringState) {}
                 override fun onIceCandidate(candidate: IceCandidate) { scope.launch {
                     if (closed) return@launch
-                    runCatching { signal(id, "ice", JSONObject().put("candidate", candidate.sdp).put("mid", candidate.sdpMid).put("line", candidate.sdpMLineIndex)) }
+                    runCatching { sendSignal(id, "ice", JSONObject().put("candidate", candidate.sdp).put("mid", candidate.sdpMid).put("line", candidate.sdpMLineIndex)) }
                 } }
                 override fun onIceCandidatesRemoved(candidates: Array<out IceCandidate>) {}
                 override fun onAddStream(stream: MediaStream) {}
@@ -117,7 +117,7 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
         }
         private fun local(sdp: SessionDescription, event: String) {
             connection.setLocalDescription(observer {}, sdp)
-            scope.launch { runCatching { signal(id, event, JSONObject().put("sdp", sdp.description)) } }
+            scope.launch { runCatching { sendSignal(id, event, JSONObject().put("sdp", sdp.description)) } }
         }
         fun signal(event: String, payload: JSONObject) {
             when (event) {
