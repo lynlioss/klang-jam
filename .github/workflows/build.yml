@@ -1,0 +1,76 @@
+name: Build Jam
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci --ignore-scripts && npm run names && npm test
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-37.2 build-tools;37.0.0'
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Restore release signing
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          KEYSTORE: ${{ secrets.JAM_KEYSTORE_B64 }}
+        run: |
+          test -n "$KEYSTORE" || { echo 'Set the Jam signing secrets before publishing a release'; exit 1; }
+          printf '%s' "$KEYSTORE" | base64 --decode > "$RUNNER_TEMP/jam.jks"
+          echo "JAM_KEYSTORE_FILE=$RUNNER_TEMP/jam.jks" >> "$GITHUB_ENV"
+      - name: Build and test
+        env:
+          SUPABASE_URL: ${{ vars.SUPABASE_URL }}
+          SUPABASE_PUBLISHABLE_KEY: ${{ secrets.SUPABASE_PUBLISHABLE_KEY }}
+          JAM_KEYSTORE_PASSWORD: ${{ secrets.JAM_KEYSTORE_PASSWORD }}
+          JAM_KEY_ALIAS: ${{ secrets.JAM_KEY_ALIAS }}
+        run: |
+          ./gradlew :plugin:assembleRelease :plugin:lintRelease :plugin:testReleaseUnitTest --no-daemon
+          cp plugin/build/outputs/apk/release/plugin-release.apk plugin.apk
+          sha256sum plugin.apk > plugin.apk.sha256
+          sha256sum plugin.json > plugin.json.sha256
+          python3 scripts/verify-release.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: klang-jam
+          path: |
+            plugin.apk
+            plugin.apk.sha256
+            plugin.json
+            plugin.json.sha256
+            plugin/build/reports/
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: klang-jam
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            plugin.apk
+            plugin.apk.sha256
+            plugin.json
+            plugin.json.sha256
+          fail_on_unmatched_files: true
+          generate_release_notes: true

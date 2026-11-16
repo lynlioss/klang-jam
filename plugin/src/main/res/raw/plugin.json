@@ -1,0 +1,98 @@
+{
+  "apiVersion": 1,
+  "id": "klang-jam",
+  "name": "Jam",
+  "version": "1.0.0",
+  "type": "extension",
+  "author": "Lynli",
+  "repository": "https://github.com/lynlioss/klang-jam",
+  "summary": "Your music. Up to four people. One Jam.",
+  "description": "Create a Jam or join with a four-character invite. Share local audio over encrypted WebRTC data channels and listen together with synchronized playback.",
+  "privacy": "Uses Supabase anonymous accounts and private Realtime channels for membership, clock synchronization and WebRTC signaling. Audio travels over encrypted peer connections. An optional TURN relay carries encrypted traffic when direct connections fail. Temporary received audio is deleted when a Jam ends; saving a song is your choice.",
+  "defaultEnabled": false,
+  "features": [
+    "Four-person Jams",
+    "Four-character invites",
+    "Album-themed Material 3 Expressive UI",
+    "Encrypted, chunked audio transfer",
+    "Late-join synchronization",
+    "Optional group controls",
+    "Automatic cache cleanup"
+  ],
+  "buttons": [
+    {
+      "label": "Source",
+      "url": "https://github.com/lynlioss/klang-jam",
+      "icon": "source"
+    }
+  ],
+  "settings": [
+    {
+      "id": "supabaseUrl",
+      "type": "text",
+      "title": "Supabase project URL",
+      "default": "https://pbvojjvjboeykhrbjrgo.supabase.co"
+    },
+    {
+      "id": "supabaseKey",
+      "type": "text",
+      "title": "Supabase publishable key",
+      "description": "Leave blank to use the key supplied by the plugin release. Never use a service-role key.",
+      "default": "",
+      "secret": true
+    },
+    {
+      "id": "stunUrl",
+      "type": "text",
+      "title": "STUN server",
+      "description": "Direct connections work without a TURN relay on compatible networks.",
+      "default": "stun:stun.l.google.com:19302"
+    },
+    {
+      "id": "turnUrl",
+      "type": "text",
+      "title": "Optional TURN relay",
+      "description": "Leave blank to use direct WebRTC. Example: turns:relay.example.com:5349",
+      "default": ""
+    },
+    {
+      "id": "turnUsername",
+      "type": "text",
+      "title": "TURN username",
+      "default": ""
+    },
+    {
+      "id": "turnPassword",
+      "type": "text",
+      "title": "TURN password",
+      "default": "",
+      "secret": true
+    }
+  ],
+  "extension": {
+    "package": "app.lynli.klang.jam",
+    "service": "app.lynli.klang.jam.JamService",
+    "capabilities": [
+      "ui.nowPlaying",
+      "ui.panel",
+      "playback.observe",
+      "playback.control",
+      "audio.read",
+      "audio.receive",
+      "links"
+    ],
+    "nowPlayingActions": [
+      {
+        "id": "jam",
+        "label": "Jam",
+        "icon": "jam"
+      }
+    ],
+    "hosts": [
+      "jamklang.pages.dev"
+    ],
+    "schemes": [
+      "klang"
+    ]
+  }
+}

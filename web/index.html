@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>__TITLE__</title><meta name="color-scheme" content="light dark">
+<meta property="og:title" content="__TITLE__"><meta property="og:description" content="Your music. Up to four people. One Jam.">
+<style>
+:root{color-scheme:light dark;font-family:system-ui,sans-serif;background:#f8f6fc;color:#25222a}
+body{margin:0;min-height:100svh;display:grid;place-items:center;padding:24px;box-sizing:border-box}
+main{max-width:420px;width:100%;text-align:center} .symbol{font-size:52px;color:#6750a4}
+h1{font-size:40px;line-height:1.1;letter-spacing:-1px;margin:16px 0}p{color:#625e69;line-height:1.6}
+.code{background:#eaddff;color:#21005d;border-radius:32px;font-size:64px;font-weight:800;letter-spacing:6px;padding:28px;margin:28px 0}
+a{display:block;border-radius:999px;padding:18px 24px;text-decoration:none;background:#6750a4;color:#fff;font-weight:650;margin:12px 0}.secondary{background:#e8def8;color:#1d192b}.small{font-size:13px}
+@media(prefers-color-scheme:dark){:root{background:#0d0b10;color:#eee9f4}p{color:#cbc4d1}.code{background:#4f378b;color:#eaddff}a{background:#d0bcff;color:#381e72}.secondary{background:#342b40;color:#e8def8}.symbol{color:#d0bcff}}
+</style>
+</head>
+<body><main>
+<div class="symbol" aria-hidden="true">♫</div><h1>Music is better<br>together.</h1>
+<p>Join your friend's Jam in Klang.<br>Four people. The same moment.</p>
+<div class="code" id="code">__CODE__</div>
+<a id="open" href="klang://jam/__CODE__">Open in Klang</a>
+<a class="secondary" href="https://github.com/lynlioss/klang/releases/latest">Get Klang</a>
+<p class="small">Install and enable the recommended Jam plugin in Klang, then enter this code.</p>
+<p id="status" role="status" class="small"></p>
+</main><script>
+const code = '__CODE__';
+if(!code){document.getElementById('code').hidden=true;document.getElementById('open').href='klang://jam';}
+document.getElementById('open').addEventListener('click',()=>{document.getElementById('status').textContent='Opening Klang… If nothing happens, install Klang and the Jam plugin, then try again.';});
+</script></body></html>

@@ -1,0 +1,7 @@
+{
+  "name": "klang-jam-build-tools",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": { "names": "node scripts/generate-names.cjs", "test": "node --test web/worker.test.mjs" },
+  "devDependencies": { "unique-names-generator": "4.7.1" }
+}
