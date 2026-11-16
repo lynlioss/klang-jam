@@ -77,6 +77,7 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
         @Volatile private var closed = false
         private val acknowledged = AtomicLong(0)
         @Volatile private var completedHash = ""
+        private var reportedOpen = false
         private fun callback(block: () -> Unit) = scope.launch { if (!closed) block() }
         fun init(offer: Boolean) {
             val config = PeerConnection.RTCConfiguration(servers).apply {
@@ -143,12 +144,17 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
             if (channel != null || dataChannel.label() != "jam-audio-v1") { dataChannel.close(); return }
             channel = dataChannel
             incoming = Channel(32)
+            fun channelState() {
+                if (closed) return
+                if (dataChannel.state() == DataChannel.State.OPEN && !reportedOpen) {
+                    reportedOpen = true; changed(id, "Connected"); opened(id)
+                } else if (dataChannel.state() == DataChannel.State.CLOSED) {
+                    incoming?.close(); changed(id, "Disconnected")
+                }
+            }
             dataChannel.registerObserver(object : DataChannel.Observer {
                 override fun onBufferedAmountChange(previous: Long) {}
-                override fun onStateChange() { callback {
-                    if (dataChannel.state() == DataChannel.State.OPEN) { changed(id, "Connected"); opened(id) }
-                    else if (dataChannel.state() == DataChannel.State.CLOSED) { incoming?.close(); changed(id, "Disconnected") }
-                } }
+                override fun onStateChange() { callback(::channelState) }
                 override fun onMessage(buffer: DataChannel.Buffer) {
                     if (closed) return
                     if (buffer.data.remaining() > 16 * 1024) { scope.launch { close() }; return }
@@ -161,6 +167,9 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                     if (incoming?.trySend(buffer.binary to bytes)?.isSuccess != true) scope.launch { changed(id, "Transfer interrupted"); close() }
                 }
             })
+            // onDataChannel may deliver an already OPEN receiver channel. Observers
+            // are not guaranteed to replay its transition after registration.
+            channelState()
             transfer = scope.launch {
                 try {
                     val input = requireNotNull(incoming)
