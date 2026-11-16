@@ -70,6 +70,7 @@ class JamService : Service() {
     private val tickLock = Mutex()
     private val queueInstallLock = Mutex()
     private var lastCacheKeep = ""
+    private var lastNominatedNext = ""
     private var switchingPosition = 0L
     private val directory get() = File(cacheDir, "outgoing").apply { mkdirs() }
     private val self get() = realtime?.userId.orEmpty()
@@ -524,9 +525,9 @@ class JamService : Service() {
             entries.put(entry)
         }
         val nomination = if (leader) "" else next?.optString("key").orEmpty()
-        val signature = entries.toString() + nomination
+        val signature = entries.toString() + queue.currentKey + nomination
         if (signature == installedQueue) return@withLock
-        playback("playback.queue", JSONObject().put("tracks", entries).put("nextKey", nomination))
+        playback("playback.queue", JSONObject().put("tracks", entries).put("key", queue.currentKey).put("nextKey", nomination))
         installedQueue = signature
     }
     private fun snapshotPosition(now: Long = SystemClock.elapsedRealtime()): Long {
@@ -545,6 +546,8 @@ class JamService : Service() {
         }
         if (pendingControl) return
         val observed = snapshot.optJSONObject("track")?.optString("id").orEmpty()
+        val nominated = next?.optString("key").orEmpty()
+        if (nominated != lastNominatedNext) { lastNominatedNext = nominated; sendQueue() }
         if (switchingKey.isBlank() && queue.find(observed) != null && observed != queue.currentKey) {
             queue.currentKey = observed; queue.changed(); sendQueue(); lastPlayback = null
         }
@@ -663,7 +666,7 @@ class JamService : Service() {
         realtime?.close(); peers?.close(); peers = null
         getSharedPreferences("jam-session", 0).edit().remove("room").apply()
         room = null; queue.clear(); playbackAnchor.reset(); localReferences.clear(); announcedUploads.clear(); notices.clear(); installedQueue = ""; lastPlayback = null; switchingKey = ""; lastSync = null; lastSequence = -1; sequence = 0
-        networkReady = false; frozen = false; desiredPlaying = false; switchingPosition = 0; lastCheckpoint = 0; lastClockPing = 0; lastCacheKeep = ""
+        networkReady = false; frozen = false; desiredPlaying = false; switchingPosition = 0; lastCheckpoint = 0; lastClockPing = 0; lastCacheKeep = ""; lastNominatedNext = ""
         files.clear(); sourceHashes.clear(); ready.clear(); receivedHashes.clear(); libraryHashes.clear(); receiving.clear(); connections.clear(); transmitting.clear(); preparing.clear()
         safe { host.request("session.clear") }
         directory.deleteRecursively()
