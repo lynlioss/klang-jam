@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.json.JSONObject
 import org.webrtc.*
+import org.webrtc.audio.JavaAudioDeviceModule
 import java.io.File
 import java.nio.ByteBuffer
 import java.security.MessageDigest
@@ -19,7 +20,18 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
     private val changed: (String, String) -> Unit,
     private val opened: (String) -> Unit) {
     private val directory = File(context.cacheDir, "incoming").apply { deleteRecursively(); mkdirs() }
-    private val factory: PeerConnectionFactory
+    // A solo room only needs Supabase. Load native WebRTC when a peer actually connects.
+    private val factoryDelegate = lazy {
+        PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(context.applicationContext).createInitializationOptions())
+        val audio = JavaAudioDeviceModule.builder(context.applicationContext)
+            .setUseHardwareAcousticEchoCanceler(false).setUseHardwareNoiseSuppressor(false)
+            .createAudioDeviceModule()
+        try {
+            audio.setAudioRecordEnabled(false)
+            PeerConnectionFactory.builder().setAudioDeviceModule(audio).createPeerConnectionFactory()
+        } finally { audio.release() }
+    }
+    private val factory by factoryDelegate
     private val peers = mutableMapOf<String, Peer>()
     private val servers = buildList {
         settings.optString("stunUrl", "stun:stun.l.google.com:19302").takeIf { it.isNotBlank() }?.let {
@@ -31,14 +43,12 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                 .setPassword(settings.optString("turnPassword")).createIceServer())
         }
     }
-    init {
-        PeerConnectionFactory.initialize(PeerConnectionFactory.InitializationOptions.builder(context).createInitializationOptions())
-        factory = PeerConnectionFactory.builder().createPeerConnectionFactory()
-    }
     fun ensure(id: String, offer: Boolean) {
         if (id in peers) return
         val peer = Peer(id); peers[id] = peer
-        peer.init(offer)
+        var initialized = false
+        try { peer.init(offer); initialized = true }
+        finally { if (!initialized) { peers.remove(id); peer.close() } }
     }
     fun removeExcept(ids: Set<String>) { peers.keys.toList().filter { it !in ids }.forEach { peers.remove(it)?.close() } }
     fun retryOffer(id: String) {
@@ -55,7 +65,7 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
         ensure(id, false)
         peers[id]?.signal(event, payload)
     }
-    fun close() { peers.values.forEach { it.close() }; peers.clear(); factory.dispose(); directory.deleteRecursively() }
+    fun close() { peers.values.forEach { it.close() }; peers.clear(); if (factoryDelegate.isInitialized()) factory.dispose(); directory.deleteRecursively() }
     private inner class Peer(val id: String) {
         lateinit var connection: PeerConnection
         var channel: DataChannel? = null

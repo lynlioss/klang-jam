@@ -92,7 +92,11 @@ internal class Realtime(private val context: Context, private val scope: Corouti
                     heartbeat = scope.launch {
                         while (isActive && !closed && attempt == generation) {
                             delay(20_000)
-                            renew(); send("heartbeat", JSONObject(), "phoenix")
+                            try { renew(); send("heartbeat", JSONObject(), "phoenix") }
+                            catch (cancelled: CancellationException) { throw cancelled }
+                            catch (failure: Exception) {
+                                socket?.cancel(); retry(attempt); break
+                            }
                         }
                     }
                 }

@@ -9,8 +9,9 @@ android {
         applicationId = "app.lynli.klang.jam"
         minSdk = 36
         targetSdk = 36
-        versionCode = 1
+        versionCode = 2
         versionName = manifest["version"] as String
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", literal(System.getenv("SUPABASE_URL")?.takeIf { it.isNotBlank() } ?: "https://pbvojjvjboeykhrbjrgo.supabase.co"))
         buildConfigField("String", "SUPABASE_KEY", literal(System.getenv("SUPABASE_PUBLISHABLE_KEY")?.takeIf { it.isNotBlank() } ?: "sb_publishable_e58FPKaFe0oDxDAmOz7p0A_y4XCRGyi"))
     }
@@ -38,4 +39,6 @@ dependencies {
     implementation("io.github.webrtc-sdk:android:144.7559.05")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.json:json:20250517")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
 }

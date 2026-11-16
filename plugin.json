@@ -2,7 +2,7 @@
   "apiVersion": 1,
   "id": "klang-jam",
   "name": "Jam",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "extension",
   "author": "Lynli",
   "repository": "https://github.com/lynlioss/klang-jam",

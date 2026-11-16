@@ -3,6 +3,7 @@ package app.lynli.klang.jam
 import android.app.Service
 import android.content.Intent
 import android.os.*
+import android.util.Log
 import kotlinx.coroutines.*
 import org.json.JSONArray
 import org.json.JSONObject
@@ -12,7 +13,8 @@ import kotlin.math.abs
 
 /** Entire Jam session, synchronization and UI model live in this separately installed plugin. */
 class JamService : Service() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate +
+        CoroutineExceptionHandler { _, failure -> reportFailure(failure) })
     private val host = Host()
     private var callerUid = -1
     private var callerToken = ""
@@ -92,10 +94,14 @@ class JamService : Service() {
     })
     override fun onCreate() { super.onCreate(); Names.load(this); directory.deleteRecursively(); File(cacheDir, "incoming").deleteRecursively(); name = Names.random() }
     override fun onBind(intent: Intent?) = binder.binder
-    private fun safe(block: suspend () -> Unit) = scope.launch {
-        try { block() }
-        catch (cancelled: CancellationException) { throw cancelled }
-        catch (e: Exception) { error = e.message ?: "Jam could not complete this action"; render() }
+    private fun safe(block: suspend () -> Unit) = scope.launch { jamAction(::reportFailure, block) }
+    private fun reportFailure(failure: Throwable) {
+        if (failure is CancellationException) return
+        if (failure !is Exception && failure !is LinkageError) throw failure
+        Log.e("KlangJam", "Jam operation failed", failure)
+        error = if (failure is LinkageError) "Audio sharing couldn't start on this device. Update Jam and try again."
+            else failure.message ?: "Jam could not complete this action"
+        render()
     }
     private suspend fun action(json: JSONObject) {
         when (json.optString("action")) {
@@ -181,9 +187,15 @@ class JamService : Service() {
                     }
                 }
             }
-            clockJob = scope.launch { while (isActive && room != null) { if (!leader) { clock.resetWindow(); repeat(5) { ping(); delay(200) } }; delay(10_000) } }
-            if (leader) prepareCurrent()
+            clockJob = safe { while (isActive && room != null) { if (!leader) { clock.resetWindow(); repeat(5) { ping(); delay(200) } }; delay(10_000) } }
+            // Audio preparation must not undo a successfully created room.
+            if (leader) safe { prepareCurrent() }
+        } catch (cancelled: CancellationException) {
+            reset(); throw cancelled
         } catch (e: Exception) {
+            if (room != null) runCatching { realtime?.rpc("leave", JSONObject().put("room", roomId)) }
+            reset(); throw e
+        } catch (e: LinkageError) {
             if (room != null) runCatching { realtime?.rpc("leave", JSONObject().put("room", roomId)) }
             reset(); throw e
         } finally { busy = false; render() }
@@ -479,7 +491,6 @@ class JamService : Service() {
         val syncing = r != null && (!networkReady || current == null || if (leader) frozen || preparing.isNotEmpty() else
             !clock.calibrated || !snapshot.optBoolean("ready") || current?.optString("sha256") !in receivedHashes + libraryHashes || lastSync == null || lastSync?.optBoolean("syncing") == true)
         if (r == null) {
-            items.put(item("hero", "Together").put("supporting", "YOUR MUSIC · ONE MOMENT"))
             items.put(item("text", "Bring up to four people into the same song. Start a Jam, or use a friend's invite."))
             items.put(button("Create a Jam", "create", "add"))
             items.put(item("field", "Invite code").put("id", "code").put("input", "code").put("maxLength", 4).put("value", invite))
