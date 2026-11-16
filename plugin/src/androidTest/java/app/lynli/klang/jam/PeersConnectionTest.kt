@@ -33,14 +33,17 @@ class PeersConnectionTest {
                 val hostOpened = CompletableDeferred<Unit>()
                 val guestOpened = CompletableDeferred<Unit>()
                 val received = CompletableDeferred<ByteArray>()
+                val uploaded = CompletableDeferred<ByteArray>()
+                val controlReceived = CompletableDeferred<String>()
                 lateinit var host: Peers
                 lateinit var guest: Peers
                 withContext(Dispatchers.Main) {
                     host = Peers(device("host"), scope, JSONObject().put("stunUrl", ""),
-                        { _, event, payload -> Log.i("JamPeerTest", "host sends $event"); guest.signal("host", event, payload) }, { _, _ -> false },
-                        { _, _, _ -> fail("Guest must not send audio") },
+                        { _, event, payload -> Log.i("JamPeerTest", "host sends $event"); guest.signal("host", event, payload) }, { sender, meta -> sender == "guest" && meta.optString("sha256") == hash && meta.optLong("bytes") == bytes.size.toLong() },
+                        { _, _, incoming -> uploaded.complete(incoming.readBytes()) },
                         { _, status -> Log.i("JamPeerTest", "host: $status"); if (status.contains("failed", true)) failures.add(status) },
-                        { hostOpened.complete(Unit) })
+                        { hostOpened.complete(Unit) },
+                        { _, kind, payload -> if (kind == "control") controlReceived.complete(payload.getString("operation")) })
                     guest = Peers(device("guest"), scope, JSONObject().put("stunUrl", ""),
                         { _, event, payload -> Log.i("JamPeerTest", "guest sends $event"); host.signal("guest", event, payload) },
                         { sender, meta -> sender == "host" && meta.optString("sha256") == hash && meta.optLong("bytes") == bytes.size.toLong() },
@@ -53,6 +56,18 @@ class PeersConnectionTest {
                     withTimeout(30_000) { hostOpened.await(); guestOpened.await() }
                     withContext(Dispatchers.Main) { withTimeout(30_000) { host.send("guest", metadata, file) } }
                     assertArrayEquals(bytes, withTimeout(5000) { received.await() })
+                    withContext(Dispatchers.Main) {
+                        withTimeout(30_000) {
+                            coroutineScope {
+                                val upload = async { guest.send("host", metadata, file) }
+                                delay(10)
+                                assertTrue(guest.control("host", "control", JSONObject().put("operation", "pause")))
+                                upload.await()
+                            }
+                        }
+                    }
+                    assertArrayEquals(bytes, withTimeout(5000) { uploaded.await() })
+                    assertEquals("pause", withTimeout(5000) { controlReceived.await() })
                     assertTrue(failures.joinToString(), failures.isEmpty())
                 } finally {
                     withContext(Dispatchers.Main) { host.close(); guest.close() }

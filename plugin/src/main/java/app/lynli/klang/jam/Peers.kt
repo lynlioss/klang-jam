@@ -18,7 +18,8 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
     private val accept: (String, JSONObject) -> Boolean,
     private val received: suspend (String, JSONObject, File) -> Unit,
     private val changed: (String, String) -> Unit,
-    private val opened: (String) -> Unit) {
+    private val opened: (String) -> Unit,
+    private val message: (String, String, JSONObject) -> Unit = { _, _, _ -> }) {
     private val directory = File(context.cacheDir, "incoming").apply { deleteRecursively(); mkdirs() }
     // A solo room only needs Supabase. Load native WebRTC when a peer actually connects.
     private val factoryDelegate = lazy {
@@ -61,6 +62,11 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
     }
     fun isOpen(id: String) = peers[id]?.channel?.state() == DataChannel.State.OPEN
     suspend fun send(id: String, metadata: JSONObject, file: File) { requireNotNull(peers[id]).send(metadata, file) }
+    suspend fun control(id: String, event: String, payload: JSONObject): Boolean {
+        val peer = peers[id] ?: return false
+        if (!isOpen(id) || JSONObject().put("event", event).put("payload", payload).toString().toByteArray().size > 16 * 1024) return false
+        peer.control(event, payload); return true
+    }
     fun signal(id: String, event: String, payload: JSONObject) {
         ensure(id, false)
         peers[id]?.signal(event, payload)
@@ -161,6 +167,12 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                     val bytes = ByteArray(buffer.data.remaining()); buffer.data.get(bytes)
                     if (!buffer.binary) {
                         val json = runCatching { JSONObject(bytes.toString(Charsets.UTF_8)) }.getOrNull()
+                        if (json?.has("event") == true) {
+                            val event = json.optString("event")
+                            if (event in setOf("track", "sync", "control", "ready", "clock_ping", "clock_pong", "request_sync", "transfer_request"))
+                                callback { message(id, event, json.optJSONObject("payload") ?: JSONObject()) }
+                            return
+                        }
                         if (json?.has("ack") == true) { acknowledged.set(json.optLong("ack")); return }
                         if (json?.has("complete") == true) { scope.launch { completedHash = json.optString("complete") }; return }
                     }
@@ -232,6 +244,11 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
                 frame(dataChannel, JSONObject().put("end", metadata.getString("sha256")).toString().toByteArray(), false)
                 while (completedHash != metadata.getString("sha256")) { delay(10); requireOpen(dataChannel) }
             }
+        }
+        suspend fun control(event: String, payload: JSONObject) {
+            val bytes = JSONObject().put("event", event).put("payload", payload).toString().toByteArray()
+            require(bytes.size <= 16 * 1024) { "Jam message too large" }
+            frame(requireNotNull(channel), bytes, false)
         }
         private suspend fun requireOpen(dataChannel: DataChannel) = withContext(Dispatchers.Main) {
             require(!closed && dataChannel.state() == DataChannel.State.OPEN) { "Peer connection closed" }

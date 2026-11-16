@@ -9,7 +9,7 @@ android {
         applicationId = "app.lynli.klang.jam"
         minSdk = 36
         targetSdk = 36
-        versionCode = 4
+        versionCode = 5
         versionName = manifest["version"] as String
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "SUPABASE_URL", literal(System.getenv("SUPABASE_URL")?.takeIf { it.isNotBlank() } ?: "https://pbvojjvjboeykhrbjrgo.supabase.co"))
