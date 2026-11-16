@@ -25,7 +25,7 @@ class JamService : Service() {
     private var next: JSONObject? = null
     private var stateJob: Job? = null
     private var clockJob: Job? = null
-    private val clock = SyncClock()
+    private var clock = SyncClock()
     private val files = mutableMapOf<String, File>()
     private val sourceHashes = mutableMapOf<String, String>()
     private val ready = mutableMapOf<String, MutableSet<String>>()
@@ -218,7 +218,7 @@ class JamService : Service() {
                     clock.sample(payload.getLong("t0"), payload.getLong("t1"), payload.getLong("t2"), SystemClock.elapsedRealtime())
                     applySync()
                 }
-                "request_sync" -> if (leader) sendTracks(sender)
+                "request_sync" -> if (leader) { peers?.retryOffer(sender); sendTracks(sender) }
                 "transfer_request" -> if (leader) sendTracks(sender, payload.optString("sha256"))
                 "track" -> if (!leader && sender == leaderId) {
                     val hash = payload.getString("sha256").also { require(it.matches(Regex("[a-f0-9]{64}"))) }
@@ -279,7 +279,7 @@ class JamService : Service() {
         try {
             val (file, digest) = readAudio(source)
             if (session != generation || room == null) { file.delete(); return }
-            files[digest] = file; sourceHashes[source] = digest
+            files.put(digest, file)?.takeIf { it != file }?.delete(); sourceHashes[source] = digest
             current = metadata(track, digest, file.length(), false)
             lastObservedSource = source
             frozen = false; resumeAfterSync = false; lastPublished = 0
@@ -389,7 +389,7 @@ class JamService : Service() {
                 try {
                     val (file, digest) = readAudio(source)
                     if (session != generation) { file.delete(); return@safe }
-                    files[digest] = file; sourceHashes[source] = digest
+                    files.put(digest, file)?.takeIf { it != file }?.delete(); sourceHashes[source] = digest
                     next = metadata(requireNotNull(following), digest, file.length(), true)
                     others.forEach { sendTracks(it) }
                 } finally { preparing.remove(source) }
@@ -458,7 +458,7 @@ class JamService : Service() {
         finally { reset(); busy = false; error = null; render() }
     }
     private fun reset() {
-        generation++
+        generation++; clock = SyncClock()
         stateJob?.cancel(); clockJob?.cancel(); applyJob?.cancel(); switchJob?.cancel()
         realtime?.close(); peers?.close(); peers = null
         room = null; current = null; next = null; lastSync = null; lastSequence = -1; sequence = 0

@@ -41,6 +41,14 @@ internal class Peers(context: Context, private val scope: CoroutineScope, settin
         peer.init(offer)
     }
     fun removeExcept(ids: Set<String>) { peers.keys.toList().filter { it !in ids }.forEach { peers.remove(it)?.close() } }
+    fun retryOffer(id: String) {
+        val peer = peers[id] ?: return
+        if (peer.channel?.state() == DataChannel.State.OPEN) return
+        val description = peer.connection.localDescription ?: return
+        if (description.type == SessionDescription.Type.OFFER) scope.launch {
+            runCatching { signal(id, "offer", JSONObject().put("sdp", description.description)) }
+        }
+    }
     fun isOpen(id: String) = peers[id]?.channel?.state() == DataChannel.State.OPEN
     suspend fun send(id: String, metadata: JSONObject, file: File) { requireNotNull(peers[id]).send(metadata, file) }
     fun signal(id: String, event: String, payload: JSONObject) {
