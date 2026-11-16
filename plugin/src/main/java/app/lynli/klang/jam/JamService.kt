@@ -75,7 +75,7 @@ class JamService : Service() {
             runCatching {
                 val json = JSONObject(text.ifBlank { "{}" })
                 when (message.what) {
-                    1 -> { settings = json.optJSONObject("settings") ?: JSONObject(); render() }
+                    1 -> { settings = json.optJSONObject("settings") ?: JSONObject(); lastUi = ""; render() }
                     2 -> safe { action(json) }
                     3 -> {
                         snapshot = json
@@ -447,8 +447,8 @@ class JamService : Service() {
             val delta = target - local
             val payload = JSONObject().put("sha256", hash).put("playing", latest.optBoolean("playing"))
                 .put("title", latest.optString("title")).put("artist", latest.optString("artist")).put("album", latest.optString("album"))
-            if (trackChanged || abs(delta) > 80 || !latest.optBoolean("playing")) payload.put("positionMs", target).put("speed", 1)
-            else payload.put("speed", SyncClock.correction(delta).toDouble())
+            if (trackChanged || abs(delta) > 80) payload.put("positionMs", target).put("speed", 1)
+            else payload.put("speed", if (latest.optBoolean("playing")) SyncClock.correction(delta).toDouble() else 1.0)
             try { host.request("playback.apply", payload) }
             catch (cancelled: CancellationException) { throw cancelled }
             catch (e: Exception) { error = e.message; render() }
