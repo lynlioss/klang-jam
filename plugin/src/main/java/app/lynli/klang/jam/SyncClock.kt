@@ -9,7 +9,7 @@ internal class SyncClock {
     var calibrated = false; private set
     fun sample(t0: Long, t1: Long, t2: Long, t3: Long): Boolean {
         val rtt = (t3 - t0) - (t2 - t1)
-        if (rtt !in 0..5000 || rtt > bestRtt + 20) return false
+        if (rtt !in 0..5000 || bestRtt != Long.MAX_VALUE && rtt > bestRtt + 20) return false
         bestRtt = minOf(bestRtt, rtt)
         offsetMs = ((t1 - t0) + (t2 - t3)) / 2
         calibrated = true
