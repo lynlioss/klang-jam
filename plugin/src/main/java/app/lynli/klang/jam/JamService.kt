@@ -151,9 +151,12 @@ class JamService : Service() {
             realtime = network
             network.authenticate(settings.optString("supabaseUrl").ifBlank { BuildConfig.SUPABASE_URL },
                 settings.optString("supabaseKey").ifBlank { BuildConfig.SUPABASE_KEY })
+            val savedRoom = getSharedPreferences("jam-session", 0).getString("room", "").orEmpty()
+            if (savedRoom.isNotBlank()) runCatching { network.rpc("leave", JSONObject().put("room", savedRoom)) }
             name = Names.random()
             val result = network.rpc("enter", JSONObject().put("invite", code).put("member_name", name))
             room = result
+            getSharedPreferences("jam-session", 0).edit().putString("room", result.getString("id")).apply()
             lastTouch = SystemClock.elapsedRealtime()
             generation++
             peers = Peers(this, scope, settings, { target, event, payload -> network.signal(target, event, payload) },
@@ -461,6 +464,7 @@ class JamService : Service() {
         generation++; clock = SyncClock()
         stateJob?.cancel(); clockJob?.cancel(); applyJob?.cancel(); switchJob?.cancel()
         realtime?.close(); peers?.close(); peers = null
+        getSharedPreferences("jam-session", 0).edit().remove("room").apply()
         room = null; current = null; next = null; lastSync = null; lastSequence = -1; sequence = 0
         networkReady = false; localPreparedHash = ""; lastObservedSource = ""; frozen = false; resumeAfterSync = false
         files.clear(); sourceHashes.clear(); ready.clear(); receivedHashes.clear(); libraryHashes.clear(); receiving.clear(); connections.clear(); transmitting.clear(); preparing.clear()
